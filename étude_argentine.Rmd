@@ -1,0 +1,513 @@
+---
+title: "Rapport d'étude Statistique "
+author : "Hivda Alkan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+library(dendextend)
+library(cluster)
+library(factoextra)
+library(FactoMineR)
+library(psych)
+library(corrplot)
+library(gridExtra)
+library(purrr)
+library(fastcluster)
+library(ggplot2)
+library(dplyr)
+library(kableExtra)
+library(knitr)
+library(magrittr)
+library(rstatix)
+library(kableExtra)
+
+```
+
+
+# **Introduction** 
+
+L'argentine est un pays de l'Amérique du Sud, avec 40 millions d'habitants et 2,8 millions de kilomètres carrés de superficie. On compte 23 provinces et une ville autonome, le Buenos Aires.
+En Argentine, nous distinguons 5 grandes régions naturelles : 
+
+- La Patagonie, elle comprend 5 provinces telles que Neuquén, Río Negro, Chubut, Santa Cruz et Tierra del Fuego.
+- La Pampa compte 4 provinces, notamment : Buenos Aires, la Pampa, Santa Fe et Córdoba.
+- Les Andes du Nord-Ouest, aussi nommé NOA, cette région comprend 5 provinces : Jujuy, Salta, Tucumán, La Rioja et Catamarca.
+- Les Andes centrales sont constitués de 3 provinces : Mendoza, San Luis et San Juan.
+- Les plaines du Nord-Est : les 6 provinces sont Ríos, Corrientes, Misiones, Formosa, Santiago del Estero et Chaco.
+
+La région Andine et la Patagonie ont des climats rigoureux, de sorte que les habitations dans ces régions sont rares. Buenos Aires et la Pampa ont un climat doux et parfois humide qui rend ces régions plus attrayantes pour les colons.
+
+L'Argentine a de vastes prairies, donc l'économie dépend de l'agriculture et de l'élevage. Les principaux produits agricoles comprennent le bœuf, la canne à sucre, le blé, le soja et le maïs. La plupart de ces produits agricoles sont cultivés dans la Pampa et dans le nord-est du pays. L'Argentine est l'un des pays les plus industrialisés d'Amérique du Sud. La plupart des usines se trouvent à ou près de Buenos Aires. Ils fabriquent des aliments, des produits, des automobiles, des produits chimiques, des textiles, des livres et des magazines. La plus importante ressource de l'Argentine est le pétrole. Il y a des gisements de pétrole en Patagonie et dans les Andes. Les autres minéraux importants sont le zinc, le fer, le cuivre, l'étain et l'uranium.
+
+
+En 2019, l'Argentine a connu une crise, elle a été victime de l'inflation et d'une récession, la pandémie du Covid-19 a fortement impacté le PIB avec une baisse de 16,2%. La pauvreté urbaine a atteint 40,9% de la population. Le gouvernement argentinien a mis en place des programmes tels que l'Allocation universelle familiale, ce tranfert de cash vient en aide à 9,3% de la population. 
+
+L'Unicef Argentine, pour aider en complément des aides gouvernementaux, propose deux types de programmes de cash transfert. 
+
+Le premier programme **"Women empowerment"** : vise à venir en aide au deux provinces les plus vulnérables, avec 4 millions de dollars de cash transferts. 
+Le second programme **"No-Poor"** : vise à venir en aide aux familles vulnérables qui vivent dans les deux provinces les plus riches et mieux dotés en matière de développement. Le cash transfert est de 15 millions de dollars. 
+
+Ainsi, le but de notre étude est de déterminer  : quelles sont les deux régions qui correspondent le plus aux deux profils recherchés par l’UNICEF pour les deux programmes présentés et sa lutte contre la réduction de la pauvreté en Argentine? **En d'autres termes, quelles sont les provinces les plus pauvres et les provinces les plus riches?**
+
+
+Dans un premier temps, nous appliquerons l’analyse en composantes principales (ACP) pour observer les potentiels similarités et dissimilarité entre nos provinces et ce du point de vue de l'ensemble de nos variables afin de pouvoir dégager des catégories/ profil d'individus. Ensuite, nous réaliserons une classification ascendante hiérarchique (CAH) des provinces d'Argentine pour se constituer une typologie de celles-ci et finir par déterminer nos provinces-cibles. A travers cette étude, différents outils complémentaires seront mobiliser afin de constituer des classes homogènes de province en terme de degré de pauvreté et de vulnérabilité dont principalement la méthode des K-means.
+
+
+# **Description de nos données**
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(readr)
+argentina <- read.table(file = "data/argentina.csv" , 
+                        sep = ";", 
+                        header = T)
+```
+
+En effet, nous nous baserons  sur le jeu de données “argentina”. Il comporte 22 observations et 10 variables. Les interventions de l'Unicef se portent dans différentes provinces sauf Buenos Aires. C'est pourquoi nous avons enlevé de notre jeu de données la capitale du pays. 
+
+Nous allons choisir quelques variables de notre base de données. Les variables choisies sont les suivantes : 
+
+- **province** : ce sont les individus 
+- **gdp_per_cap** : c'est le Pib par habitant. Nous l'avons obtenu en utilisant la variable **gdp** que l'on a divisé par la variable **pop** (population). Il représente la richesse moyenne des habitants dans la province et qui sera un indicateur monétaire
+- **illiteracy** : c'est l'analphabétisme : le taux de population non éduquée (sans aucune éducation formelle). 
+- **no_healthcare** :  l'accès au système de santé qui représente un besoin de base pour accéder à la sécurité
+- **movie_theatres_per_cap** : représente l'accès à la culture (par habitant), nous pouvons également considérer comme étant un indicateur de pauvreté "monétaire" vu d'un autre angle : il faut avoir un certain seuil de revenu pour pouvoir aller au cinéma. 
+- **poverty** : le taux de pauvreté (pourcentage de la population vivant sous le seuil de pauvreté), également un indicateur monétaire car obtenu selon un seuil de revenu. 
+
+Soit un total de 6 variables qui sont à la fois monétaire et plus relatif au développement humain et qui à notre avis représentent de façon assez évidente la pauvreté ou l'exposition face à la pauvreté. Nous remarquons ainsi ici plusieurs angles/ degré de pauvreté monétaire et de critères de développement humain.
+
+
+```{r include=FALSE}
+argentina$gdpop<-argentina$gdp/argentina$pop
+argentina1<-argentina[-1,c(1,3,4,7,10,12)] # choix des variables + buenos aires enlevé
+
+argentina1<-na.omit(argentina1)
+
+argentinanum<-argentina1[,-1] 
+argentinasub<-scale(argentinanum)
+rownames(argentinasub) <- argentina1$province
+```
+
+
+```{r echo=FALSE}
+
+stat <-get_summary_stats(argentina1, show = c("mean", "sd", "min", "max"))
+kable(stat, digits = 2) %>% kable_minimal()
+```
+En général, en Argentine, nous retrouvons une disparité très marquée de profils. Par exemple, en moyenne, 
+
+- le taux de pauvreté se situe à 10% avec un minumum de 3,4% et un maximum de 17,04% 
+
+- le PIB/habitant moyen est de 18,33 avec un minimum de 10,63 et un maximum de 42,57.
+
+Les données sur movie_theatres_per_cap sont très proches de 0 car en effet il est logique qu'il puisse pas y avoir un théâtre pour un individu par exemple.
+
+Nos variables ayant des unités différentes, nous traitons la possible présence de missing values et surtout standardisons nos données.
+
+# **Résultats empiriques** 
+
+## **Analyse en composante principale**
+
+Commençons par une fouille des données en nous demandant quelles ressemblances pouvons-nous observer entre les provinces du point de vue de l'ensemble des variables : quels profils? 
+
+Après avoir traiter la possible présence de missing values et standardiser nos données (étant donnée que nos variables possèdent des unités différentes), voici les informations sur 10 premières provinces d'Argentine.
+
+```{r}
+tete<-round(head(argentinasub,10), 2)
+kable(tete)%>% kable_minimal()
+```
+
+Le résultat obtenu nous montre la complexité de la réalité, il n'y a pas de profil-type d'une province très pauvre (que des "mauvais" indicateurs) ou d'une province riche ("bons" indicateurs). Par exemple, si nous observons par rapport au PIB/ habitant, Entre-Rios et La Rioja ont à peu près un même niveau de PIB/hab mais pourtant Entre-Rios semble avoir une meilleure situation que La Rioja avec par exemple un meilleur système de soin, un taux de pauvreté plus faible etc. 
+
+Ensuite, quelles relations pouvons-nous observer entre les variables?
+Prenons les variables deux à deux pour observer les différentes liaisons.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(corrplot)
+mat<- cor(argentinasub)
+mat
+```
+
+### *Matrice des corrélations*
+
+```{r fig.height=5, fig.width=8}
+par(mfrow=c(1,2))
+corrplot(mat, method = "square", type ="lower")
+corrplot(mat, method = "number", type ="lower")
+```
+
+Nous remarquons que la variable movie_theatres_per_capita et gdpop sont corrélées positivement elles. Elle présentent toutefois une corrélation négative forte avec le reste des variables. Enfin, le reste de nos variables est positivement correlés entre elles, prises 2 à 2.
+
+Cela nous semble assez logique puisque plus une province est riche plus on a les moyens d'aller au cinéma et qu'en général, les éléments déterminants de la vulnérabilité et de la pauvreté ont tendance à s'auto-renforcer entre elles : on est vulnérable/ pauvre et on se vulnérabilise/ s'appauvrit encore plus à cause de notre situation de base.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(psych)
+```
+
+Toutefois, est-ce qu'on peut considérer que ces corrélations prise deux à deux (matrice de corrélation produite plus haut) sont assez importantes et ne se compense pas (différent de 0)? 
+
+```{r echo=FALSE}
+bar.test <- cortest.bartlett(mat, n=nrow(argentinasub))
+bar.test
+```
+
+De plus, le test de Bartlett propose un résultat très significatif (p-val = 4.14e-09). On rejette l'hypothèse nulle qui considère que les variances de k échantillons tirés sont identiques. Il y a bien corrélation entre les variables présentées par la matrice de corrélation. L'ACP est donc bien possible !  
+
+### **Nombres d'axes et d'inertie**
+
+Nous allons à présent déterminer les axes d'allongements de l'ACP, nous utiliserons en particulier le score plot (coude d'effondrement) pour déterminer le nombre de composantes principales à retenir dans notre analyse en composantes principales.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(factoextra)
+library(FactoMineR)
+```
+
+### *Diagramme des valeurs propres*
+
+```{r}
+res.pca <- PCA(argentinasub, graph = FALSE )
+fviz_eig(res.pca,addlabels = TRUE)
+```
+
+On observe une décroissance régulière à partir du 2ème axe. 
+
+De plus, on constate que la première dimension explique à elle-seule 74% de l'inertie totale et près de 83% cumulée avec la deuxième dimension ! Nous considérons qu'un seuil d'au moins 80% est déjà très satisfaisant. Les deux premières dimensions regroupent la majorité de la diversité des profils.
+
+### *Tableau des valeurs propres*
+
+```{r echo=FALSE}
+eig.val <- get_eigenvalue(res.pca)
+kable(eig.val, digits = 2) %>%
+kable_minimal()
+```
+
+Nous avons déduit nos axes principaux et travaillons sur des représentations à deux dimensions mais il est nécessaire de nous demander quelle sont les variables les mieux représentées dans ces axes et dans chacune des deux axes? 
+
+### **Quelle est la qualité de représentation de nos variables? **
+
+### *Méthode : un barplot du cos²*
+
+```{r fig.height=3, fig.width=4}
+
+par(mfrow=c(3,1))
+
+fviz_cos2(res.pca , choice = "var", axes = 1:2)
+fviz_contrib(res.pca, choice = "var", axes = 1)
+fviz_contrib(res.pca, choice = "var", axes = 2)
+
+#par(mfrow=c(1,1))
+
+```
+
+Plus la valeur de cos² est proche de 1, meilleure est la représentation. Ce sont les variables no_healthcare et gdpop qui sont les mieux représentées par les axes principaux avec un cos² supérieur à 0,8 suivis de très près par poverty puis de  movie_theatres_per_cap et illeteracy qui ont un cos à plus de 0,75.
+
+En détail, les variables no_healthcare et illetacy sont en particulier très bien représentée sur le premier axe avec un contribution à plus de 20% tandis que le reste est très mal représenté dans l'axe 2 mais est très bien représenté dans le premier axe avec une contribution d'au moins 20% pour chaque variable dont poverty et gdpop plus de 35% ! 
+
+Remarquons toutefois que la variable movie_theatres_per_cap contribue assez beaucoup à la première dimension et a une contribution moins forte dans l'axe 2 par rapport au 2 autres variables.
+
+Nous pouvons ainsi dire que nos avons un axe représentant la pauvreté monétaire et un axe plus centrée sur le développement humain
+
+### **Projection des variables**
+
+Nous projetons nos variables sur un cercle de corrélation.
+Plus une variable est proche du cercle de corrélation, meilleure est sa représentation sur la carte de l’ACP et au contraire, plus les variables sont proches du centre du graphique moins elles sont  importantes pour les composantes.
+
+En parallèle à la méthode du barplot vu plus haut, nous retrouvons des résultats cohérents à ce qui a été dit plus haut. Les variables gdpop et no_healthcare sont par exemple les mieux représentées et contribuent le plus au deuxième axe tandis que les variable illeteracy et movie_theatres_per_cap sont un peu plus éloignées des limites du cercle et possèdent un cos² de 0,79.
+
+Il est intéressant de remarquer que les flèches représentant les variables illeteracy et no_healthcare sont quasi-superposées sur le cercle.
+
+```{r}
+par(mfrow = c(1,2))
+fviz_pca_var(res.pca , col.var = "cos2", repel = TRUE )
+fviz_pca_var(res.pca , col.var = "contrib")
+par(mfrow=c(1,1))
+```
+
+On retrouve également ce que a été dit pour la matrice de corrélation[^1] sur les différentes relations qu'entretiennent les variables entre elles par l'interprétation des angles sur le cercle de corrélation. 
+
+[^1]: "Nous remarquons que la variable movie_theatres_per_capita et gdpop sont corrélées positivement elles. Elle présentent toutefois une corrélation négative forte avec le reste des variables. Enfin, le reste de nos variables est positivement correlés entre elles, prises 2 à 2."
+
+### **Qu'en est-il de nos individus (provinces)? : projection des provinces**
+
+Projetons à présent nos individus.
+
+```{r fig.height=5, fig.width=8}
+fviz_pca_ind(res.pca, col.ind = "cos2", pointsize = "cos2", pointshape = 19, repel = TRUE)
+```
+On rappelle que la position des provinces par rapport à l'axe 1 correspond au développement humain et l'axe 2 à la pauvreté monétaire.
+
+Les provinces les plus concernées par l'axe 1 sont par exemple Chaco, Formosa, Santiago, Corrientes, Santa Cruz, Chubut, Misiones. Ces provinces sont ceux qui bénéficient/ souffrent le plus d'un développement humain fort/ faible.
+Les provinces les plus concernées par l'axe 2 sont La Pampa et Santa Cruz. 
+Toutes ont un cos² d'au minimum 0,75 et cela est également confirmé dans le diagramme ci-dessous où plus de la moitié des provinces est bien représentée par les axes.
+
+En général, on peut dire que nos individus sont assez repartis sur l'ensemble du graphique, ce qui vient renforcer l'idée d'une grande diversité des profils en Argentine. Cependant, il serait intéressant de rajouter que nos points semblent plus se placer en fonction de l'axe 1, ce qui revient à nous dire que la diversité se fait particulièrement en fonction du développement humain et moins en terme de pauvreté monétaire.
+
+```{r fig.height=4, fig.width=5}
+fviz_contrib(res.pca , choice = "ind", axes = 1:2)
+```
+
+```{r fig.height=5, fig.width=7}
+fviz_pca_biplot(res.pca, repel = TRUE, pointsize = "cos2")
+```
+A ce stade, nous apercevons vaguement les regroupements de provinces et de types de profils mais nous remarquons toutefois des cas bien marqués. Par exemple pour le cas de Chaco, nous pouvons observer que la province Chaco est la plus touchée par l'analphabétisme et le manque de système de santé mais elle est bien moins touché par la pauvreté monétaire que La Pampa qui elle, est très peu impacté par le développement humain et est pourtant parmi l'une des plus "pauvres" (par rapport à l'axe 1).
+
+## **Classification ascendante hiérarchique**
+
+Nous pouvons à présent construire une hiérarchie sur nos provinces et avoir une représentation final sous forme d'un dendogramme.
+
+Tout d'abord, observons les similitudes/ dissimulitudes à travers la matrice des distances euclidiennes. 
+
+```{r fig.height=4, fig.width=6}
+distance<-get_dist(argentinasub)
+fviz_dist(distance,
+          gradient=list(low="grey",
+                        mid="white",
+                        high="red"))
+```
+Nous retrouvons des résultats similaires par rapport à ce qui a été vu avec la projection finale réalisée par l'ACP. Santa Cruz sont par exemple les plus différentes entre elles tandis que Salta et Jujuy sont très similaires tout comme Chaco et Formosa. 
+On peut commencer à vaguement apercevoir des groupements entre : 
+
+- des provinces très différentes
+
+- des provinces très similaires 
+
+- des provinces autant similaires que différentes
+
+Ainsi, déterminons le nombre de clusters (groupes) optimal à observer et pour cela, nous allons utiliser 3 outils.
+
+**K-means et typologies optimales**
+
+### *Première méthode : K-means*
+
+```{r}
+km1<-kmeans(argentinasub,centers=2,nstart=25)
+km2<-kmeans(argentinasub,centers=3,nstart=25)
+km3<-kmeans(argentinasub,centers=4,nstart=25)
+```
+
+```{r}
+p1 <- fviz_cluster(km1, geom = "point", data = argentinasub) + ggtitle("k = 2")
+p2 <- fviz_cluster(km2, geom = "point", data = argentinasub) + ggtitle("k = 3")
+p3 <- fviz_cluster(km3, geom = "point", data = argentinasub) + ggtitle("k = 4")
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(gridExtra)
+```
+
+```{r echo=FALSE, fig.height=6, fig.width=8}
+grid.arrange(p1, p2, p3,nrow =2)
+``` 
+Nous penchons plus sur un nombre optimal de k=3 car les groupes semblent plus homogènes.
+
+### *Deuxième méthode : Coude d'effondrement*
+
+```{r }
+fviz_nbclust(argentinasub,kmeans,method="wss") +
+  geom_vline(xintercept = 3, linetype = 2)  +
+  labs(subtitle = "Elbow method") +
+  theme_minimal()
+```
+
+Le meilleur choix semble être k=3. En effet, on observe une décroissance régulière à partir du 3ème cluster.
+
+
+### *Troisième méthode : Indice silhouette*
+
+```{r}
+fviz_nbclust(argentinasub,
+             kmeans,
+             method="silhouette") + theme_minimal()
+```
+
+D'après la méthode silhouette, le meilleur choix est k=2.
+
+
+### *Quatrième méthode : l'écart statistique*
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(cluster)
+```
+
+```{r}
+argentinasub<-scale(argentinasub)
+
+gap_stat<-clusGap(argentinasub, 
+                  FUN = kmeans, 
+                  nstart = 25,
+                  K.max = 10,
+                  B = 50)
+
+print(gap_stat, 
+      method = "firstmax")
+
+fviz_gap_stat(gap_stat)+ theme_minimal()
+
+```
+D'après la méthode du coude d'effondrement, le nombre optimal de cluster revient à k=2
+
+En conclusion, le nombre optimal de cluster varie entre 2 et 3 clusters.
+Notre choix revient à un nombre optimal de 3 clusters d'après les résultats obtenus dans nos deux premières méthodes (elbow method,k-means) car nous considérons qu'il est plus pertinent d'avoir 3 clusters et d'obtenir une catégorie "moyenne" afin de pouvoir nous focaliser sur les 2 autres clusters qui contiennent mes extrêmes.
+
+### *Représentation finale*
+
+```{r fig.height=5, fig.width=7}
+final<-kmeans(argentinasub,3,nstart=25)
+fviz_cluster(final,data=argentinasub,
+             xlab = "", ylab = "")+ theme_minimal()
+
+print(final)
+```
+
+La méthode des k-means explicite la présence de trois clusters composés de 6, 4, et 11 individus (voir tableau). La variance intra-cluster, respectivement de 6%, 9,4% et 14,65%, nous indique une assez forte similarité au sein des clusters (moins pour le dernier cluster) et une assez forte dissimilarité entre les clusters (70%). Ce qui nous semble être un bon signe.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(dplyr)
+```
+
+```{r}
+MClust<- argentinanum%>%
+mutate(Cluster = final$cluster)%>%
+group_by(Cluster) %>%
+summarise_all("mean")
+
+kable(MClust, digits = 2) %>%
+kable_minimal()
+
+arrests <- cbind(argentinasub,
+cluster = final$cluster)
+```
+D'après ce tableau mais également les résultats obtenus dans tableau précédent (avec le K-means clustering), cela revient à dire de manière grossière, qu'il y a trois clusters pour représenter trois types de provinces : 
+
+- les provinces "pauvres" (cluster 1) : ce cluster regroupent en particulier les provinces touchées par la pauvreté monétaire et un mauvais développement humain. On retrouve ici en moyenne, le plus haut taux de pauvreté (14,63), d'analphabétisme, le plus faible PIB/hab et la moindre présence de systèmes de santé.
+
+- les provinces "riches" (cluster 2) : ce cluster est au contraire celui qui regroupe les provinces qui sont le moins touchés par les dimensions de la pauvreté. Elle possède les meilleures mesures à l'inverse du cluster 1 
+
+- enfin, les provinces de pauvreté/ richesse "moyennes" (cluster 3). 
+
+Il serait donc intéressant d'observer plus tard les variations intra-clusters pour pouvoir déterminer les provinces nécessaires.
+
+```{r}
+hc1 <- agnes(distance, method ="single") 
+hc2 <- agnes(distance, method ="complete") 
+hc3 <- agnes(distance, method ="average") 
+hc4 <- agnes(distance, method ="ward") 
+
+hc1$ac # coefficient d'agglomération
+hc2$ac
+hc3$ac
+hc4$ac
+```
+
+Pour créer notre dendogramme, nous avons décidé de choisir la méthode de Ward comme la meilleure méthode de "linkage" car elle présente la meilleure visualisation (utilisation de la fonction hclust) par rapport aux autres types de dendogramme (average, single, complete) mais présente également le coefficient d'agglomération le plus élevé (0,87). C'est donc elle qui présente la plus forte structure de clustering.
+
+```{r fig.height=5, fig.width=7}
+hc1bis <- hclust(distance, 
+                 method ="ward.D2") 
+sub_grp <- cutree(hc1bis, k = 3)
+plot(hc1bis, cex = 0.6)
+rect.hclust(hc1bis, k = 3, border =
+2:5)
+```
+
+*Remarque : nous utilisons exclusivement la fonction hclust() pour présenter notre visualisation*
+
+```{r warning=FALSE}
+fviz_dend(hc1bis, k = 3,
+          cex =  0.55, horiz = TRUE,
+          rect = TRUE,
+          rect_border = "jco", 
+          rect_fill = TRUE ,
+          main = "Dendrogramme avec fviz_dend") +
+  theme_minimal()
+```
+D'après notre classification hiérarchique ascendante, le premier cluster en gris est notre cluster avece les procinces les plus riches. Elle est composé de 4 provinces. Ensuite, le deuxième cluster en jaune est composé 11 provinces : ce les provinces "moyennes". Enfin, le cluster blue constitue nos provinces pauvres avec 6 individus. 
+
+On rappelle que les clusters qui nous intéressent sont exclusivement ceux qui comportent les provinces cibles pour les programmes (soit les plus riches et les plus pauvres) et de plus, on rappelle que les provinces "moyennes" sont pour la plupart très mal représentées, ignorer ce cluster nous arrange donc.
+
+Dans le cluster des plus riches (gris), on remarque que les provinces sont tout de même assez différentes entre elles vu la hauteur de la fusion. La première combinaison de similarité est Santa Cruz et Chubut. 
+Par rapport au  cluster des plus pauvres, les provinces sont beaucoup plus similaires entre elles que dans dans le cluster des plus riches, la proximité entre elles est bien plus élevé que celle retrouvée dans le cluster des plus riches. Santiago del Estero et Corrientes sont par exemple très similaires et cette combinaison est par exemple très similaires Misiones.
+
+### **Statistiques descriptives intra-cluster**
+
+Rappel : nous nous focalisons exclusivement sur le cluster des plus pauvres et des plus riches !
+
+```{r warning=FALSE}
+provpauv<-argentina1[c(3,4,7,12,15,20),]
+
+statpauv <-get_summary_stats(provpauv, show = c("mean", "sd", "min", "max"))
+kable(statpauv, digits = 2) %>% kable_minimal()
+```
+
+Dans le cluster des plus pauvres, nous avons en moyenne un PIB par habitant de 9 (mille?) dollars, un taux d'analphabétisme de 5,70%, un sévère manque de système de santé avec une moyenne de 62,56% par population active et un taux de pauvrété d'en moyenne 14,63% !
+De plus, comme vu dans le dendogramme, on remarque des écarts-types assez faible prouvant de plus que nos provinces sont assez similaires (moins en ce qui concerne les systèmes de santé).
+
+```{r warning=FALSE}
+provrich<-argentina1[c(5,9,13,18),]
+
+statrich <-get_summary_stats(provrich, show = c("mean", "sd", "min", "max"))
+kable(statrich, digits = 2) %>% kable_minimal()
+```
+
+A l'inverse, nous avons ici un PIB/hab de 35 mille dollars par habitant, soit 3 fois plus élevé que le cluster des provinces pauvres (8,99%). Le taux de pauvreté est plus faible de moitié (7,23% contre 14,63%) et le taux d'analphabétisme est 4 fois plus faible également (1,46% contre 5,70%).
+
+# **Conclusion et discussion**
+
+En parallèle avec l'analyse en composantes principales, la classification ascendante hiérarchique nous permet de conclure sur le fait que Santa Cruz et La Pampa forment les deux provinces les plus riches et que Chaco et Formosa les plus pauvres. 
+
+En effet, bien les provinces les plus pauvres et les plus riches ne soient pas les plus similaires dans le cluster, ces provinces font parties de celles sont les mieux représentées par les axes de l'ACP.
+
+```{r}
+pauvres<-argentina1[c(4,7),]
+kable(pauvres, digits = 2) %>% kable_minimal()
+```
+
+Ainsi, en ce qui concerne les plus pauvres : 
+
+- Formosa est la province qui a le plus faible PIB/hab, le taux de pauvreté le plus élevé d'Argentine et est celle avec le plus grand manque de système de santé. Cependant, elle possède un taux d'analphabétisme plus faible que la moyenne. 
+
+- Chaco possède possède le plus grand taux d'analphabétisme et fait également parti de celle qui sont les plus touché par le manque de système dee soin.
+
+On pourrait dire que Formosa est plus touché par la pauvreté que Chamo mais sur une dimension plus monétaire tandis que Chaco est la plus pauvre province en terme de développement humain.
+
+Quant aux provinces riches, 
+
+- La Pampa est la province qui possède le moins de taux de pauvreté (3,40%) et fait parti de celle qui sont les plus dotée en système de santé (45,48). Par contre, elle possède le PIB/hab le plus faible parmi les provinces les plus riches et son taux d'analphabétisme se situe dans la moyenne des provinces les plus riches.
+
+- Santa Cruz possède le PIB/ hab le plus élevé (42,57), le taux d'analphabétisation le plus faible (0,79) mais est la moins dotée en système de santé (29,73) parmi les provinces les plus riches et est l'une des provinces avec le taux de pauvreté le plus élevé parmi les provinces riches (8,02). 
+
+Il est clair ici que Santa Cruz est la plus riche mais qu'elle voit en son sein de très grandes inégalités notamment en terme de revenus par habitants. 
+
+```{r}
+riches<-argentina1[c(9,18),]
+kable(riches, digits = 2) %>% kable_minimal()
+```
+
+Nous considérons ces résultats robustes au vu des différentes méthodes utilisées. 
+Toutefois, rappelons que nous avons dans notre analyse des composantes principales que les deux axes englobaient près de 80% de l'information (des variances). Il reste donc 20% de la diversité des profils qui n'est pas prise en compte. 
+
+Pour finir, il faut rappeler que les profils visés par l'UNICEF étaient en particulier les mères célibataires avec enfants des foyers les plus vulnérables et les foyers vulnérables en général qui se situe au dessus du seuil de pauvreté et cinq fois en dessous. Or, notre base de données ne comportait ni d'informations sur la composition du ménage ni sur le revenu des familles en détail. 
+
+# **Sources** 
+
+- Direction Générale du Trésor (2022) - Situation économique en Argentine 
+
+- OECD (2019) Economic Survey 2019. Tecnical Report. 
+
+- UNDP (2020) Social and Economic Impact of COVID-19 and Policy Options in Argentina. Tecnical Report. 
+Alain Brilleau, Les indicateurs liés à la mise en œuvre des Cadres Stratégiques de Lutte contre la Pauvreté, 2003
+
+- Hélène Thomas, "Vulnérabilité, fragilité, précarité, résilience, etc. ", Recueil Alexandries, Collections Esquisses, janvier 2008,
+
+- Minujin, Alberto, and Néstor López. “Au sujet des pauvres et des vulnérables : le cas argentin”, Revue Tiers Monde, vol. 36, no. 142, Armand Colin, 1995, pp. 365–81
+
+- Moummi, Ahmed (2010), Analyse de la pauvreté en République démocratique du Congo ,
+Working Papers Series N° 112, African Development Bank, Tunis, Tunisia
+
+
